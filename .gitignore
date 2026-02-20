@@ -1,0 +1,40 @@
+# ==========================================
+# 1. Archivos del Sistema macOS
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# ==========================================
+# 2. Archivos de Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# 3. Archivos del Proyecto (Datos Sensibles)
+# ==========================================
+# Ignorar la carpeta completa con los Excel crudos del cliente
+archivos_cliente/
+
+# Ignorar los Excel de prueba o generados
+Template_Listo_Para_Subir.xlsx
+nomina_cliente.xlsx
+Libro1.xlsx
+NOMINA*.xlsx
+
+# ==========================================
+# 4. Editores de Código (VS Code, PyCharm, etc.)
+# ==========================================
+.vscode/
+.idea/
+*.swp
