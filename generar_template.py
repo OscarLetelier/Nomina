@@ -5,70 +5,62 @@ import numpy as np
 
 def separar_nombres_y_apellidos(texto):
     """
-    Divide una cadena de texto que representa un nombre completo en Nombres y Apellidos.
+    Evalúa una cadena de texto y extrae de forma heurística los nombres y apellidos.
     
-    Aplica una heurística basada en el conteo de palabras para determinar la separación:
-    - 1 palabra: Se asume como Nombre.
-    - 2 palabras: 1 Nombre + 1 Apellido.
-    - 3 palabras: 1 Nombre + 2 Apellidos.
-    - 4 o más palabras: 2 Nombres + El resto de palabras como Apellidos.
-    
-    Args:
-        texto (str): Cadena de texto con el nombre del usuario.
+    Parámetros:
+        texto (str): Cadena original que contiene el nombre completo del trabajador.
         
-    Returns:
-        pd.Series: Serie de pandas indexable con dos posiciones [Nombre, Apellido].
+    Retorna:
+        tuple: (nombres, apellidos) separados según la cantidad de palabras detectadas.
+               Si el valor es nulo, retorna dos cadenas vacías.
     """
     if pd.isna(texto) or str(texto).strip() == "":
-        return pd.Series(["", ""])
-    
+        return "", ""
+        
     partes = str(texto).strip().split()
-    total = len(partes)
+    total_palabras = len(partes)
     
-    if total == 1:
-        return pd.Series([partes[0], ""])
-    elif total == 2:
-        return pd.Series([partes[0], partes[1]])
-    elif total == 3:
-        return pd.Series([partes[0], f"{partes[1]} {partes[2]}"])
+    if total_palabras == 1:
+        return partes[0], ""
+    elif total_palabras == 2:
+        return partes[0], partes[1]
+    elif total_palabras == 3:
+        return partes[0], f"{partes[1]} {partes[2]}"
     else:
+        # Para 4 o más palabras, asume los dos primeros como nombres y el resto como apellidos
         nombres = " ".join(partes[:2])
         apellidos = " ".join(partes[2:])
-        return pd.Series([nombres, apellidos])
+        return nombres, apellidos
 
 def formatear_nomina_cliente():
     """
-    Función principal que orquesta la importación, normalización y exportación de nóminas.
+    Controlador principal del proceso ETL (Extract, Transform, Load) para nóminas de clientes.
     
-    Flujo de ejecución:
-    1. Verifica la existencia del directorio de entrada.
-    2. Itera sobre cada archivo .xlsx y sus respectivas hojas (tabs).
-    3. Normaliza los encabezados usando un diccionario de traducción (alias).
-    4. Concatena todos los datos en un único DataFrame en memoria.
-    5. Deduplica los registros utilizando el RUT como identificador único.
-    6. Aplica reglas de negocio específicas (separación de nombres, formato RBD).
-    7. Filtra el DataFrame resultante contra la estructura estricta del template oficial.
-    8. Exporta el archivo consolidado.
+    Fases del proceso:
+    1. Extracción: Lectura iterativa de múltiples archivos Excel (.xlsx) y sus respectivas hojas.
+    2. Consolidación y Auditoría: Unión de datos, limpieza estructural y exclusión documentada de duplicados/nulos.
+    3. Reglas de Negocio: Transformación de nombres, estandarización de cargos y unificación de centros de trabajo.
+    4. Ensamblaje: Formateo final hacia la plantilla estricta de 16 columnas y aplicación de estilos condicionales.
     """
     
-    # --- CONFIGURACIÓN DE RUTAS ---
+    # --- CONFIGURACIÓN DE RUTAS Y CONSTANTES ---
     carpeta_entrada = 'archivos_cliente'
-    archivo_salida = 'Template_Listo_Para_Subir.xlsx'
+    archivo_salida = 'Template_Listo_Para_Subir1.xlsx'
+    archivo_excluidos = 'Reporte_Registros_Excluidos.xlsx'
 
-    # Validar y crear directorio de trabajo si no existe
+    # Validación de directorio de origen
     if not os.path.exists(carpeta_entrada):
         os.makedirs(carpeta_entrada)
-        print(f"[INFO] Se creó el directorio de trabajo '{carpeta_entrada}'.")
-        print("[INFO] Mueva los archivos Excel del cliente a esta carpeta y vuelva a ejecutar.")
+        print(f"[WARNING] Directorio '{carpeta_entrada}' no encontrado. Se ha creado automáticamente.")
+        print("[INFO] Por favor, deposite los archivos Excel en el directorio y ejecute nuevamente.")
         return
 
     archivos_excel = glob.glob(f"{carpeta_entrada}/*.xlsx")
-    
     if not archivos_excel:
-        print(f"[ERROR] No se encontraron archivos Excel (.xlsx) en '{carpeta_entrada}'.")
+        print(f"[ERROR] No se encontraron archivos con extensión .xlsx en '{carpeta_entrada}'.")
         return
 
-    # --- DEFINICIÓN DE ESTRUCTURAS ---
+    # Estructura estricta requerida por la base de datos de destino
     columnas_template = [
         'nombre', 'apellido', 'rut', 'correo', 'direccion', 'telefono', 
         'fecha de ingreso', 'fecha de nacimiento', 'cargo', 'tipo de usuario', 
@@ -76,125 +68,170 @@ def formatear_nomina_cliente():
         'rut supervisor', 'correo de bienvenida', 'área'
     ]
 
-    # Diccionario de equivalencias para estandarizar los nombres de columnas entrantes
+    # Diccionario de equivalencias (Mapping) para normalizar las variaciones de los clientes
     alias_columnas = {
-        'nombre_completo': ['nombre completo', 'nombres y apellidos', 'nombre trabajador', 'trabajador', 'colaborador', 'empleado', 'nombre'],
+        'nombre_completo': ['nombre completo', 'nombres y apellidos', 'nombre trabajador', 'trabajador', 'colaborador', 'empleado'],
+        'nombre': ['nombres', 'primer nombre', 'nombre', 'nombre(s)'],
+        'apellido': ['apellidos', 'apellidos trabajador', 'apellido', 'apellido(s)'],
         'correo': ['email', 'correo electronico', 'e-mail', 'mail'],
-        'rut': ['rut trabajador', 'rut empleado', 'identificacion', 'run', 'r.u.t'],
+        'rut': ['rut trabajador', 'rut empleado', 'identificacion', 'run', 'r.u.t', 'id empleado', 'id_empleado'],
         'telefono': ['celular', 'telefono', 'fono', 'tel'],
         'fecha de ingreso': ['fecha ingreso', 'ingreso', 'fecha contratacion', 'fecha de inicio de contrato', 'fecha inicio contrato', 'inicio de contrato', 'inicio contrato'],
         'fecha de nacimiento': ['fecha nacimiento', 'nacimiento', 'fecha de nac', 'cumpleaños'],
         'área': ['area', 'departamento', 'seccion'],
+        'centro de trabajo': ['centro de trabajo', 'sucursal / rbd', 'sucursal rbd', 'sucursal', 'lugar de trabajo'],
         'codigo_rbd_temp': ['rbd informado por vero', 'rbd', 'codigo rbd'],
         'nombre_rbd_temp': ['nombre rbd', 'establecimiento', 'colegio']
     }
 
-    # Invertir diccionario para iteración eficiente de Pandas (llave: alias, valor: columna oficial)
+    # Inversión de diccionario para optimización de búsqueda (Llave: Alias del cliente -> Valor: Nombre oficial)
     mapeo_traduccion = {}
-    for columna_oficial, lista_posibles in alias_columnas.items():
+    for col_oficial, lista_posibles in alias_columnas.items():
         for alternativo in lista_posibles:
-            mapeo_traduccion[alternativo] = columna_oficial
+            mapeo_traduccion[alternativo] = col_oficial
 
     lista_dataframes_procesados = []
+    print(f"[INFO] Iniciando procesamiento de {len(archivos_excel)} archivo(s) detectado(s).")
 
-    print(f"[INFO] Iniciando procesamiento de {len(archivos_excel)} archivo(s).")
-
-    # --- FASE 1: EXTRACCIÓN Y NORMALIZACIÓN INICIAL ---
+    # --- FASE 1: EXTRACCIÓN Y ESTANDARIZACIÓN INICIAL ---
     for ruta_archivo in archivos_excel:
         nombre_archivo = os.path.basename(ruta_archivo)
-        print(f"[INFO] Leyendo archivo: {nombre_archivo}")
-        
         try:
-            # sheet_name=None carga todas las hojas en un diccionario
+            # Lectura en modo texto para prevenir distorsión de formatos numéricos (ej. pérdida de ceros en RUT/Teléfono)
             diccionario_hojas = pd.read_excel(ruta_archivo, sheet_name=None, dtype=str)
-        except Exception as e:
-            print(f"[ERROR] Fallo al procesar {nombre_archivo}. Detalle: {e}")
+        except Exception as error:
+            print(f"[ERROR] Imposible procesar el archivo '{nombre_archivo}'. Detalle técnico: {error}")
             continue
 
         for nombre_hoja, df_hoja in diccionario_hojas.items():
             if df_hoja.empty:
                 continue
+            
+            # Trazabilidad: Registrar de qué archivo y hoja proviene cada bloque de datos
+            df_hoja['origen_hoja'] = f"{nombre_archivo} -> {nombre_hoja}"
                 
-            print(f"       Procesando hoja '{nombre_hoja}' ({len(df_hoja)} registros).")
-
-            # Normalización de encabezados: pasar a string, limpiar espacios, minúsculas y quitar tildes
+            # Normalización de encabezados (minúsculas, sin espacios iniciales/finales, sin tildes)
             df_hoja.columns = df_hoja.columns.astype(str).str.strip().str.lower()
             df_hoja.columns = (df_hoja.columns
-                               .str.replace('á', 'a')
-                               .str.replace('é', 'e')
-                               .str.replace('í', 'i')
-                               .str.replace('ó', 'o')
-                               .str.replace('ú', 'u'))
+                               .str.replace('á', 'a').str.replace('é', 'e')
+                               .str.replace('í', 'i').str.replace('ó', 'o').str.replace('ú', 'u'))
             
-            # Aplicar mapeo y eliminar columnas duplicadas dentro de la misma hoja
+            # Aplicación de mapeo de alias y purga de columnas duplicadas por error del cliente
             df_hoja.rename(columns=mapeo_traduccion, inplace=True)
             df_hoja = df_hoja.loc[:, ~df_hoja.columns.duplicated()]
             
             lista_dataframes_procesados.append(df_hoja)
 
     if not lista_dataframes_procesados:
-        print("[ERROR] No se extrajeron datos válidos de los archivos proporcionados.")
+        print("[WARNING] No se extrajeron datos útiles de los archivos proporcionados.")
         return
 
-    # --- FASE 2: CONSOLIDACIÓN Y DEDUPLICACIÓN ---
+    # --- FASE 2: CONSOLIDACIÓN GLOBAL Y AUDITORÍA DE DATOS ---
     df_cliente = pd.concat(lista_dataframes_procesados, ignore_index=True)
-    print(f"\n[INFO] Registros totales consolidados (sin filtrar): {len(df_cliente)}")
-
+    
     if 'rut' in df_cliente.columns:
-        # Estandarización de formato RUT para validación estricta
+        # Estandarización estricta de la clave primaria (RUT)
         df_cliente['rut'] = df_cliente['rut'].astype(str).str.strip().str.upper()
-        df_cliente['rut'] = df_cliente['rut'].replace(['NAN', 'NONE', 'NULL'], np.nan)
+        df_cliente['rut'] = df_cliente['rut'].replace(['NAN', 'NONE', 'NULL', ''], np.nan)
         
-        total_antes = len(df_cliente)
-        
-        # Eliminar duplicados globales conservando el primer registro encontrado
-        df_cliente.drop_duplicates(subset=['rut'], keep='first', inplace=True)
-        # Eliminar filas donde el RUT sea nulo (identificador primario requerido)
-        df_cliente.dropna(subset=['rut'], inplace=True)
-        
-        registros_descartados = total_antes - len(df_cliente)
-        print(f"[INFO] Deduplicación completada: {registros_descartados} registros ignorados (duplicados o sin RUT).")
+        # Identificación de registros carentes de clave primaria
+        mask_sin_rut = df_cliente['rut'].isna()
+        df_sin_rut = df_cliente[mask_sin_rut].copy()
+        if not df_sin_rut.empty:
+            df_sin_rut['MOTIVO_RECHAZO'] = 'RECHAZO CRÍTICO: Clave primaria (RUT) ausente o inválida.'
+
+        # Identificación de registros duplicados basados en la clave primaria
+        df_con_rut = df_cliente[~mask_sin_rut]
+        mask_duplicados = df_con_rut.duplicated(subset=['rut'], keep='first')
+        df_duplicados = df_con_rut[mask_duplicados].copy()
+        if not df_duplicados.empty:
+            df_duplicados['MOTIVO_RECHAZO'] = 'RECHAZO POR DUPLICIDAD: RUT ya ingresado en un registro o archivo anterior.'
+
+        # Consolidación del reporte de excepciones
+        lista_excluidos = []
+        if not df_sin_rut.empty: lista_excluidos.append(df_sin_rut)
+        if not df_duplicados.empty: lista_excluidos.append(df_duplicados)
+
+        if lista_excluidos:
+            df_excluidos_final = pd.concat(lista_excluidos, ignore_index=True)
+            # Reorganización de columnas para priorizar la visualización del motivo de rechazo
+            columnas_ordenadas = ['MOTIVO_RECHAZO', 'origen_hoja'] + [c for c in df_excluidos_final.columns if c not in ['MOTIVO_RECHAZO', 'origen_hoja']]
+            df_excluidos_final = df_excluidos_final[columnas_ordenadas]
+            df_excluidos_final.to_excel(archivo_excluidos, index=False)
+            print(f"[INFO] Auditoría de datos completada: Se excluyeron {len(df_excluidos_final)} registros inconsistentes.")
+            print(f"[INFO] Reporte de exclusiones generado satisfactoriamente en: {archivo_excluidos}")
+
+        # Aislamiento de la base de datos validada (sin duplicados y con RUT)
+        df_cliente = df_con_rut[~mask_duplicados].copy()
 
     # --- FASE 3: APLICACIÓN DE REGLAS DE NEGOCIO ---
     
-    # Regla 1: Separar nombres si vienen unificados
+    # 3.1 Normalización de Nombres y Apellidos
     if 'nombre_completo' in df_cliente.columns:
-        print("[INFO] Ejecutando heurística de separación de nombres y apellidos.")
-        df_cliente[['nombre', 'apellido']] = df_cliente['nombre_completo'].apply(separar_nombres_y_apellidos)
-
-    # Regla 2: Formatear y unificar Centro de Trabajo (RBD)
-    if 'codigo_rbd_temp' in df_cliente.columns and 'nombre_rbd_temp' in df_cliente.columns:
-        print("[INFO] Procesando formato de Centro de Trabajo (Código + Nombre RBD).")
-        df_cliente['codigo_rbd_temp'] = df_cliente['codigo_rbd_temp'].fillna('').astype(str).str.strip()
-        df_cliente['nombre_rbd_temp'] = df_cliente['nombre_rbd_temp'].fillna('').astype(str).str.strip().str.title()
+        # Caso A: El cliente provee una columna explícita de nombre completo.
+        separados = df_cliente['nombre_completo'].apply(separar_nombres_y_apellidos)
+        df_cliente['nombre'] = separados.apply(lambda x: x[0])
+        df_cliente['apellido'] = separados.apply(lambda x: x[1])
         
-        # Limpieza residual de nulos convertidos a texto
-        df_cliente['codigo_rbd_temp'] = df_cliente['codigo_rbd_temp'].replace('Nan', '')
-        df_cliente['nombre_rbd_temp'] = df_cliente['nombre_rbd_temp'].replace('Nan', '')
+    elif 'nombre' in df_cliente.columns:
+        # Caso B: Lógica deductiva. Verificación de existencia de columna de apellidos.
+        if 'apellido' not in df_cliente.columns or df_cliente['apellido'].replace('', np.nan).dropna().empty:
+            separados = df_cliente['nombre'].apply(separar_nombres_y_apellidos)
+            df_cliente['nombre'] = separados.apply(lambda x: x[0])
+            df_cliente['apellido'] = separados.apply(lambda x: x[1])
 
-        # Concatenación condicional para evitar "123 - " si falta el nombre
-        df_cliente['centro de trabajo'] = df_cliente.apply(
-            lambda row: f"{row['codigo_rbd_temp']} - {row['nombre_rbd_temp']}" 
-            if row['codigo_rbd_temp'] and row['nombre_rbd_temp'] 
-            else row['codigo_rbd_temp'] + row['nombre_rbd_temp'], 
-            axis=1
+    # 3.2 Estandarización a Mayúsculas de la columna Cargo
+    if 'cargo' in df_cliente.columns:
+        df_cliente['cargo'] = df_cliente['cargo'].fillna('').astype(str).str.strip().str.upper()
+        # Limpieza residual de nulos convertidos a cadenas de texto
+        df_cliente['cargo'] = df_cliente['cargo'].replace(['NAN', 'NONE', 'NULL'], '')
+
+    # 3.3 Consolidación de Centro de Trabajo (Código + Nombre)
+    if 'codigo_rbd_temp' in df_cliente.columns and 'nombre_rbd_temp' in df_cliente.columns:
+        codigo = df_cliente['codigo_rbd_temp'].fillna('').astype(str).str.strip().replace('Nan', '')
+        nombre = df_cliente['nombre_rbd_temp'].fillna('').astype(str).str.strip().str.title().replace('Nan', '')
+
+        # Concatenación condicional para evitar separadores huérfanos
+        serie_concatenada = pd.Series(
+            np.where((codigo != '') & (nombre != ''), codigo + ' - ' + nombre, codigo + nombre),
+            index=df_cliente.index
         )
 
-    # --- FASE 4: ENSAMBLAJE FINAL Y EXPORTACIÓN ---
-    df_final = pd.DataFrame(columns=columnas_template)
+        # Inyección de datos respetando una potencial columna ya unificada enviada por el cliente
+        if 'centro de trabajo' not in df_cliente.columns:
+            df_cliente['centro de trabajo'] = serie_concatenada
+        else:
+            df_cliente['centro de trabajo'] = df_cliente['centro de trabajo'].replace('', np.nan).fillna(serie_concatenada)
 
-    # Traspasar únicamente las columnas que coinciden con el template oficial
-    columnas_coincidentes = [col for col in df_cliente.columns if col in columnas_template]
-    for col in columnas_coincidentes:
-        df_final[col] = df_cliente[col]
-
-    # Limpieza visual del DataFrame final
-    df_final.dropna(how='all', inplace=True)
+    # --- FASE 4: ENSAMBLAJE FINAL Y APLICACIÓN DE ESTILOS ---
+    
+    # Restauración de índices para asegurar la alineación de la matriz
+    df_cliente.reset_index(drop=True, inplace=True)
+    
+    # Restructuración estricta hacia el Template Oficial
+    df_final = df_cliente.reindex(columns=columnas_template)
+    
+    # Conversión a object genérico para prevenir colisiones de tipado al inyectar cadenas vacías
+    df_final = df_final.astype(object)
     df_final.fillna('', inplace=True)
 
-    print(f"\n[INFO] Guardando {len(df_final)} usuarios en template oficial: {archivo_salida}")
-    df_final.to_excel(archivo_salida, index=False)
-    print("[INFO] Proceso finalizado con éxito.")
+    def aplicar_resaltado_correo_ausente(fila):
+        """
+        Función de estilo (CSS condicional) para el motor de exportación de Pandas.
+        Aplica fondo amarillo a las filas donde el campo de correo electrónico se encuentre vacío.
+        """
+        correo_valor = str(fila.get('correo', '')).strip().lower()
+        if correo_valor in ['', 'nan', 'none', 'null']:
+            return ['background-color: #FFFF00'] * len(fila)
+        return [''] * len(fila)
+
+    print(f"[INFO] Procediendo a la exportación final de {len(df_final)} registros validados.")
+    
+    try:
+        df_final.style.apply(aplicar_resaltado_correo_ausente, axis=1).to_excel(archivo_salida, index=False, engine='openpyxl')
+        print(f"[SUCCESS] Exportación concluida correctamente. Archivo generado: '{archivo_salida}'.")
+    except Exception as error:
+        print(f"[ERROR] Ocurrió un fallo durante la escritura del archivo final. Detalle técnico: {error}")
 
 if __name__ == "__main__":
     formatear_nomina_cliente()

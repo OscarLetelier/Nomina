@@ -19,6 +19,7 @@ venv/
 .venv/
 pip-log.txt
 pip-delete-this-directory.txt
+comparar_centros.py
 
 # ==========================================
 # 3. Archivos del Proyecto (Datos Sensibles)
@@ -28,9 +29,12 @@ archivos_cliente/
 
 # Ignorar los Excel de prueba o generados
 Template_Listo_Para_Subir.xlsx
+Centros_de_trabajo.xlsx
 nomina_cliente.xlsx
 Libro1.xlsx
 NOMINA*.xlsx
+Reporte_Centros_Accion_Requerida.xlsx
+Centros_Existentes.xlsx
 
 # ==========================================
 # 4. Editores de Código (VS Code, PyCharm, etc.)
