@@ -6,11 +6,11 @@ Este script de Python automatiza la limpieza, unificación y estandarización de
 
 ## ✨ Características Principales
 
-* **Lectura Multi-Archivo y Multi-Hoja:** Procesa automáticamente todos los Excel (y todas sus pestañas) depositados en una carpeta específica.
-* **Deduplicación Inteligente:** Identifica y elimina registros duplicados utilizando el RUT como identificador único, sin importar en qué archivo u hoja se encuentren.
-* **Separación de Nombres:** Detecta columnas unificadas (ej. "Nombre Completo") y las divide heurísticamente en "Nombre" y "Apellido".
-* **Mapeo de Alias:** Traduce automáticamente los nombres de columnas de los clientes (ej. "email", "correo electrónico", "mail") a la estructura oficial del sistema.
-* **Estandarización de Centro de Trabajo:** Fusiona las columnas de "Código RBD" y "Nombre RBD" en el formato requerido (`Código - Nombre`).
+    1. Lectura Multi-Archivo y Multi-Hoja:** Procesa automáticamente todos los Excel (y todas sus pestañas) depositados en una carpeta específica.
+    2. Deduplicación Inteligente:** Identifica y elimina registros duplicados utilizando el RUT como identificador único, sin importar en qué archivo u hoja se encuentren.
+    3. Separación de Nombres:** Detecta columnas unificadas (ej. "Nombre Completo") y las divide heurísticamente en "Nombre" y "Apellido".
+    4. Mapeo de Alias:** Traduce automáticamente los nombres de columnas de los clientes (ej. "email", "correo electrónico", "mail") a la estructura oficial del sistema.
+    5. Estandarización de Centro de Trabajo:** Fusiona las columnas de "Código RBD" y "Nombre RBD" en el formato requerido (`Código - Nombre`).
 
 ---
 
